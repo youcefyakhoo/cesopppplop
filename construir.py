@@ -86,6 +86,55 @@ def tema_data1(cat, titulo):
         return MAPA_D1[c]
     return deducir(titulo) or "Entretenimiento"
 
+BASURA = {"embed", "m3u", "m3u8", "server", "servidor", "ver", "online",
+          "play", "stream", "link", "opcion", "option", "fuente", "source",
+          "web", "720p", "1080p", "hd720", "hd1080"}
+
+def tokens(s):
+    t = sin_acentos((s or "").lower())
+    return "".join(c if c.isalnum() else " " for c in t).split()
+
+def variante(etiqueta, titulo):
+    """Lo util de la etiqueta cruda (variante/calidad), sin nombre del canal,
+    sin hostnames y sin basura tipo Embed/M3U/numeros sueltos."""
+    t = " ".join((etiqueta or "").split())
+    if not t or t.isdigit() or (" " not in t and "." in t):
+        return ""
+    toks = tokens(t)
+    # «Tvf90.COM» y demas hostnames disfrazados: cualquier token-TLD mata la variante
+    if any(tok in {"com", "net", "org", "fun", "one", "cc", "su", "io",
+                   "info", "xyz", "online"} for tok in toks):
+        return ""
+    tt = tokens(titulo)
+    if tt and toks[:len(tt)] == tt:
+        toks = toks[len(tt):]
+    out = []
+    for tok in toks:
+        if tok in BASURA or tok.isdigit():
+            continue
+        tok = {"glob": "global", "prem": "premium",
+               "fhd": "hd", "fullhd": "hd"}.get(tok, tok)
+        if tok not in out:
+            out.append(tok)
+    if not out or len(out) > 3:
+        return ""
+    v = " · ".join(x.upper() if len(x) <= 3 else x.capitalize() for x in out)
+    return v if len(v) <= 24 else ""
+
+def etiquetas_limpias(canal):
+    vistas, generica = {}, 0
+    for o in canal["options"]:
+        v = variante(o["label"], canal["title"])
+        if not v:
+            generica += 1
+            o["label"] = f"Opción {generica}"
+        elif v in vistas:
+            vistas[v] += 1
+            o["label"] = f"{v} · {vistas[v]}"
+        else:
+            vistas[v] = 1
+            o["label"] = v
+
 def main():
     if len(sys.argv) >= 3:
         d1 = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -117,7 +166,7 @@ def main():
             return
         canal["_urls"].add(url)
         canal["options"].append({
-            "label": " ".join((etiqueta or "").split()) or up.urlparse(url).netloc,
+            "label": " ".join((etiqueta or "").split()),
             "url": url})
 
     def poner_logo(canal, img):
@@ -134,7 +183,7 @@ def main():
         cat = (ch.get("category") or "").strip()
         if cat in TEMAS:
             c["category"] = cat
-        poner_logo(c, ch.get("imageUrl", ""))
+        # Los logos de data2 NO se usan (pedido del usuario): solo data1.
         for s in ch.get("servers", []):
             agregar_opcion(c, s.get("name", ""), s.get("url", ""))
         stats["de_data2"] += 1
@@ -157,6 +206,7 @@ def main():
             continue
         # directos primero, manteniendo el orden relativo
         c["options"].sort(key=lambda o: 0 if es_directo(o["url"]) else 1)
+        etiquetas_limpias(c)
         del c["_urls"]
         # Internacionales es el cajón de data2: si el nombre delata el tema,
         # el canal va a su tema real (ESPN -> Deportes, CNN -> Noticias...)
@@ -193,6 +243,11 @@ def main():
           f"urls descartadas: {stats['url_descartada']} | "
           f"canales sin enlaces utilizables: {stats['sin_enlaces']}")
     print("por categoria:", dict(conteo))
+    from collections import Counter as _C
+    print("etiquetas top:", _C(o["label"] for c in canales
+                               for o in c["options"]).most_common(8))
+    print("logos por host:", _C(c["image"].split("/")[2] if c["image"].startswith("http")
+                                else "(sin logo)" for c in canales).most_common(5))
     print(f"opciones totales: {sum(len(c['options']) for c in canales)}")
 
 if __name__ == "__main__":
