@@ -1,0 +1,26 @@
+[
+ {
+  "name": "Deportes",
+  "canales": 93
+ },
+ {
+  "name": "Entretenimiento",
+  "canales": 34
+ },
+ {
+  "name": "Películas",
+  "canales": 49
+ },
+ {
+  "name": "Infantiles",
+  "canales": 13
+ },
+ {
+  "name": "Noticias",
+  "canales": 42
+ },
+ {
+  "name": "Internacionales",
+  "canales": 248
+ }
+]
